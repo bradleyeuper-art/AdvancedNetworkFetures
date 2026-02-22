@@ -1,6 +1,6 @@
 // ==========================================
-// OSINT Networking Plugin v2
-// WHOIS, Reverse DNS, ASN, GeoIP
+// OSINT Networking Plugin v3
+// WHOIS, Reverse DNS, ASN, GeoIP, PublicIP
 // Public data only
 // ==========================================
 
@@ -13,20 +13,24 @@ commands["whois"] = "WHOIS lookup for domain ownership.";
 commands["rdns"] = "Reverse DNS lookup for IP address.";
 commands["asn"] = "ASN information for IP address.";
 commands["geoip"] = "Public IP geolocation (city-level).";
+commands["publicip"] = "Show public IPv4 and IPv6 addresses.";
 
 // ----- Save Original Handler -----
 const originalHandle = handle;
 
-// ----- Utility: Private IP Detection -----
+// ----- Private IP Detection -----
 function isPrivateIP(ip){
-    return (
-        ip.startsWith("10.") ||
-        ip.startsWith("192.168.") ||
-        (ip.startsWith("172.") && (
-            parseInt(ip.split(".")[1]) >= 16 &&
-            parseInt(ip.split(".")[1]) <= 31
-        ))
-    );
+    if(!ip) return false;
+
+    if(ip.startsWith("10.")) return true;
+    if(ip.startsWith("192.168.")) return true;
+
+    if(ip.startsWith("172.")){
+        const second = parseInt(ip.split(".")[1]);
+        if(second >= 16 && second <= 31) return true;
+    }
+
+    return false;
 }
 
 // ----- Override Handle -----
@@ -108,9 +112,9 @@ handle = async function(input){
 
         try{
 
-            // Auto detect public IP
+            // Auto-detect IP if not provided
             if(!targetIP){
-                const ipRes = await fetch("https://api64.ipify.org?format=json");
+                const ipRes = await fetch("https://api.ipify.org?format=json");
                 const ipJson = await ipRes.json();
                 targetIP = ipJson.ip;
                 print("Detected Public IP: " + targetIP);
@@ -138,10 +142,48 @@ handle = async function(input){
         return;
     }
 
-    // ----- Fallback -----
+    // =========================
+    // Public IP (IPv4 + IPv6)
+    // =========================
+    if(cmd === "publicip"){
+
+        try{
+
+            let ipv4 = null;
+            let ipv6 = null;
+
+            // IPv4
+            try{
+                const r4 = await fetch("https://api.ipify.org?format=json");
+                const j4 = await r4.json();
+                ipv4 = j4.ip;
+            }catch{}
+
+            // IPv6
+            try{
+                const r6 = await fetch("https://api64.ipify.org?format=json");
+                const j6 = await r6.json();
+                ipv6 = j6.ip;
+            }catch{}
+
+            if(!ipv4 && !ipv6){
+                return print("Could not determine public IP.");
+            }
+
+            if(ipv4) print("Public IPv4: " + ipv4);
+            if(ipv6 && ipv6 !== ipv4) print("Public IPv6: " + ipv6);
+
+        }catch{
+            print("Public IP lookup failed.");
+        }
+
+        return;
+    }
+
+    // ----- Fallback to original system -----
     return originalHandle(input);
 };
 
-print("[OSINT Networking Plugin Loaded]");
+print("[OSINT Networking Plugin v3 Loaded]");
 
 })();
